@@ -1,0 +1,63 @@
+# Wi-Fi Deauthentication Attack Detection — single source of configuration.
+# Every random process (generator, split, models) uses `seed`.
+
+seed: 42
+dataset: sample            # sample | awid3
+
+paths:
+  sample: data/sample/sample_frames.csv
+  awid3: data/awid3        # one AWID3 CSV, or a directory of CSVs (read in sorted filename order)
+  models_dir: models
+  outputs_dir: outputs
+
+loader:
+  # Subsampling for fast dev runs. We cap rows *per file* (contiguous head of each file)
+  # instead of random row sampling, because random sampling would destroy the temporal
+  # context that the windowed features (deauth_rate_window, seq_delta, rssi_deviation) need.
+  max_rows_per_file: null  # e.g. 200000; null = read everything
+  test_size: 0.3
+  shuffle_split: true      # true = stratified random split; false = temporal split (first 70% train)
+
+labels:                    # raw label values -> binary class (anything else is dropped)
+  normal: [Normal]
+  attack: [Deauth]         # add Disas to also treat disassociation floods as attacks
+
+# Canonical feature <- candidate AWID3 source columns. The first candidate present in the
+# CSV header wins. The loader prints the header and warns about any canonical field with no match.
+columns:
+  time:          [frame.time_epoch, frame.time_relative]
+  inter_arrival: [frame.time_delta, frame.time_delta_displayed]
+  type_subtype:  [wlan.fc.type_subtype]
+  seq:           [wlan.seq]
+  reason_code:   [wlan.fixed.reason_code, wlan_mgt.fixed.reason_code]
+  rssi:          [wlan.ssi_signal, radiotap.dbm_antsignal, wlan_radio.signal_dbm]
+  src:           [wlan.ta, wlan.sa]
+  dst:           [wlan.ra, wlan.da]
+  label:         [Label, label, class]
+
+features:
+  window_seconds: 1.0      # rolling time window for deauth_rate_window
+  rssi_window_frames: 10   # per-source rolling-mean length for rssi_deviation
+
+rules:                     # rule-based detector thresholds (no training)
+  mode: any                # any = OR of the three conditions, all = AND
+  deauth_rate_threshold: 10      # deauth/disassoc frames in the window
+  seq_delta_threshold: 50        # sequence-number gap vs. expected next value
+  rssi_deviation_threshold: 10   # dB away from the source's rolling-mean RSSI
+
+models:                    # sklearn kwargs; random_state is injected from `seed`
+  random_forest:
+    n_estimators: 100
+    class_weight: balanced
+  gradient_boosting:
+    n_estimators: 100
+  mlp:                     # the "lightweight neural network"
+    hidden_layer_sizes: [32, 16]
+    max_iter: 500
+
+mitigation:
+  detector: random_forest  # whose detections drive the responder during `evaluate`
+  min_score: 0.5           # minimum confidence to raise an alert
+  # Never blocklist these (your AP's BSSID). Deauth floods usually SPOOF the AP's MAC,
+  # so naively blocking the transmitter address would cut off the AP itself.
+  protected_macs: ["aa:bb:cc:00:00:01"]

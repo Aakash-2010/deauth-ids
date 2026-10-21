@@ -17,16 +17,17 @@ pip install -r requirements.txt
 
 ## Quick start (synthetic sample, no download needed)
 
-`config.yaml` ships with `dataset: sample`, which points at `data/sample/sample_frames.csv`
-(about 2000 frames, roughly 14% deauth).
+Generate the synthetic sample first. It isn't stored in the repo. Then set `dataset: sample` in
+`config.yaml`.
 
 ```bash
+python data/generator.py   # writes data/sample/sample_frames.csv (~2000 frames, ~14% deauth)
 python main.py train       # fit + save the ML detectors to models/; report on validation
 python main.py evaluate    # compare all detectors on the test split; writes outputs/
 python -m pytest -q        # smoke test
 ```
 
-To regenerate the sample: `python data/generator.py [--seed 42]`.
+Use `--seed N` to generate a different sample. The smoke test generates its own data.
 
 > The synthetic sample only shows that the pipeline works. **Don't report its numbers** in the
 > paper; use AWID3 for that.

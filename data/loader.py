@@ -29,7 +29,9 @@ def _files(path):
     files = sorted(p.glob("*.csv"), key=lambda f: [int(t) if t.isdigit() else t
                                                   for t in re.split(r"(\d+)", f.name)]) if p.is_dir() else [p]
     if not files or not files[0].exists():
-        raise FileNotFoundError(f"No CSV found at {p}. See README 'Getting AWID3'.")
+        hint = ("run `python data/generator.py` to create it" if "sample" in str(p)
+                else "see README 'Getting AWID3'")
+        raise FileNotFoundError(f"No CSV found at {p}; {hint}.")
     return files
 
 

@@ -4,3 +4,4 @@ __pycache__/
 models/
 outputs/
 data/awid3/
+data/sample/

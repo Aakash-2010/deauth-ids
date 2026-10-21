@@ -2,7 +2,7 @@
 # Every random process (generator, split, models) uses `seed`.
 
 seed: 42
-dataset: sample            # sample | awid3
+dataset: awid3             # sample | awid3
 
 paths:
   sample: data/sample/sample_frames.csv
@@ -15,8 +15,15 @@ loader:
   # instead of random row sampling, because random sampling would destroy the temporal
   # context that the windowed features (deauth_rate_window, seq_delta, rssi_deviation) need.
   max_rows_per_file: null  # e.g. 200000; null = read everything
-  test_size: 0.3
-  shuffle_split: true      # true = stratified random split; false = temporal split (first 70% train)
+  # Holdout: the LAST N files (numeric filename order) are never read by train/evaluate.
+  # Only `python main.py holdout` touches them. Needs a directory with more than N files.
+  holdout_files: 2         # AWID3: Deauth_31 + Deauth_32 (both contain attacks); 0 = disabled
+  # The remaining files are split train / validation / test:
+  val_size: 0.15           # tune rule thresholds + hyperparameters on this
+  test_size: 0.15          # report on this (and on the holdout)
+  # true = stratified random split (needed for AWID3 Deauth: attacks only start in file 21, so a
+  # temporal 70% train cut has no attacks). The holdout files remain the unseen, later-in-time test.
+  shuffle_split: true      # false = temporal split (train | val | test in time order)
 
 labels:                    # raw label values -> binary class (anything else is dropped)
   normal: [Normal]
@@ -28,9 +35,11 @@ columns:
   time:          [frame.time_epoch, frame.time_relative]
   inter_arrival: [frame.time_delta, frame.time_delta_displayed]
   type_subtype:  [wlan.fc.type_subtype]
+  fc_type:       [wlan.fc.type]       # used to derive type_subtype = type*16 + subtype
+  fc_subtype:    [wlan.fc.subtype]    #   when the CSV has no combined column (AWID3 does this)
   seq:           [wlan.seq]
   reason_code:   [wlan.fixed.reason_code, wlan_mgt.fixed.reason_code]
-  rssi:          [wlan.ssi_signal, radiotap.dbm_antsignal, wlan_radio.signal_dbm]
+  rssi:          [wlan.ssi_signal, wlan_radio.signal_dbm, radiotap.dbm_antsignal]  # radiotap holds per-antenna '-53-54-53'
   src:           [wlan.ta, wlan.sa]
   dst:           [wlan.ra, wlan.da]
   label:         [Label, label, class]
@@ -60,4 +69,4 @@ mitigation:
   min_score: 0.5           # minimum confidence to raise an alert
   # Never blocklist these (your AP's BSSID). Deauth floods usually SPOOF the AP's MAC,
   # so naively blocking the transmitter address would cut off the AP itself.
-  protected_macs: ["aa:bb:cc:00:00:01"]
+  protected_macs: ["aa:bb:cc:00:00:01", "0c:9d:92:54:fe:34"]  # sample AP, AWID3 AP

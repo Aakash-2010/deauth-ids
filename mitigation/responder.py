@@ -20,6 +20,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def _is_unicast(mac):
+    """Group (broadcast/multicast) addresses have the low bit of the first octet set; a frame
+    claiming one as its transmitter is forged and there is nothing meaningful to block."""
+    try:
+        return not int(mac.split(":")[0], 16) & 1
+    except ValueError:
+        return False
+
+
 class Responder:
     def __init__(self, cfg, blacklist_hook=None):
         out = Path(cfg["paths"]["outputs_dir"])
@@ -47,7 +56,7 @@ class Responder:
         with self.alert_log.open("a") as fh:
             fh.write(json.dumps(alert) + "\n")
         self.alerts += 1
-        if mac and mac not in self.blocked:
+        if mac and _is_unicast(mac) and mac not in self.blocked:
             self.blocked.add(mac)
             self.hook(mac)
         return True

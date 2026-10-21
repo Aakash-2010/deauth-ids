@@ -1,12 +1,12 @@
 """Evaluation of every detector on the same held-out test rows.
 
 Input:   fitted detectors, test feature matrix df[FEATURES], test labels, saved model paths.
-Process: times predict() over the whole test set (averaged over repeats, then per sample),
+Process: times predict() over the whole evaluated set (averaged over repeats, then per sample),
          computes accuracy/precision/recall/F1 and the confusion matrix, reads model size on
          disk, builds a comparison table and two plots. Data is imbalanced, so F1 and the
          confusion matrix are the primary metrics; accuracy is reported for completeness only.
-Output:  per-detector dict; outputs/comparison.csv; outputs/scores_bar.png;
-         outputs/latency_vs_f1.png; the table printed to the console.
+Output:  per-detector dict; outputs/<stage>_comparison.csv, <stage>_scores_bar.png,
+         <stage>_latency_vs_f1.png (stage = validation | test | holdout); the table printed.
 """
 import os
 import time
@@ -44,17 +44,17 @@ def evaluate_detector(det, X, y, model_path, repeats=5):
     }
 
 
-def compare(results, out_dir):
+def compare(results, out_dir, stage="test"):
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     table = pd.DataFrame(results).set_index("detector")
-    table.to_csv(out / "comparison.csv")
+    table.to_csv(out / f"{stage}_comparison.csv")
     with pd.option_context("display.float_format", "{:.4f}".format, "display.width", 160,
                            "display.max_columns", None):
-        print("\n=== Detector comparison (primary: F1 + confusion matrix) ===")
+        print(f"\n=== Detector comparison on {stage.upper()} (primary: F1 + confusion matrix) ===")
         print(table)
-    _bar(table, out / "scores_bar.png")
-    _scatter(table, out / "latency_vs_f1.png")
+    _bar(table, out / f"{stage}_scores_bar.png", stage)
+    _scatter(table, out / f"{stage}_latency_vs_f1.png", stage)
     return table
 
 
@@ -69,7 +69,7 @@ def _style(ax, title, pad=6):
     ax.set_axisbelow(True)
 
 
-def _bar(table, path):
+def _bar(table, path, stage):
     metrics = ["precision", "recall", "f1"]
     x = np.arange(len(table))
     w = 0.26
@@ -83,13 +83,13 @@ def _bar(table, path):
     ax.set_ylim(0, 1.08)
     ax.set_ylabel("score", color=INK)
     ax.legend(frameon=False, ncol=3, loc="lower left", bbox_to_anchor=(0, 1.0))
-    _style(ax, "Precision, recall and F1 by detector (test set)", pad=30)
+    _style(ax, f"Precision, recall and F1 by detector ({stage} set)", pad=30)
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
 
 
-def _scatter(table, path):
+def _scatter(table, path, stage):
     fig, ax = plt.subplots(figsize=(6.5, 4.5))
     ax.scatter(table["latency_ms"], table["f1"], s=70, color=COLORS[0], edgecolors="white", linewidths=2)
     for i, (name, row) in enumerate(table.sort_values("latency_ms").iterrows()):
@@ -101,7 +101,7 @@ def _scatter(table, path):
     ax.xaxis.set_major_formatter(matplotlib.ticker.FormatStrFormatter("%g"))
     ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
     ax.set_ylim(max(0.0, table["f1"].min() - 0.1), 1.02)
-    _style(ax, "Latency vs. F1")
+    _style(ax, f"Latency vs. F1 ({stage} set)")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
